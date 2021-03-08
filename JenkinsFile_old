@@ -1,0 +1,89 @@
+pipeline {
+    agent any 
+      stages {
+        stage('checkout') { 
+            steps {
+	git 'https://github.com/mblob1973/final_part3' 
+            }
+        }
+        stage('run app') { 
+            steps {
+	 
+	bat 'python rest_app.py'
+                    
+            }
+        }
+        stage('backend test') { 
+            steps {
+                  
+	bat 'python backend_testing.py' 
+                                  
+            }
+        }
+        stage('clear') { 
+            steps {
+	   
+	bat 'python clean_environemnt.py'  
+                     
+            }
+        }
+
+           environment {
+           registry = "motib/final_part3" 
+           registryCredential = 'docker-hub' 
+           dockerImage = project
+          }
+           stage('build and push image') {
+              steps {
+                   script {
+
+                          dockerImage = project + ":$1“ 
+                           docker.withRegistry('', registryCredential) {
+                           dockerImage.push() 
+                         }
+                     }
+                }
+            }
+        }
+        stage('make env file') { 
+            steps {
+
+                     bat 'echo IMAGE_TAG=$1 > .env'
+                  post {
+                  always {
+
+                          bat "docker rmi $registry:$1“ 
+            }
+        }
+        stage('run compose') { 
+            steps {
+	   
+            bat 'docker-compose up -d'
+                     
+            }
+        }
+        stage('testing backend') { 
+            steps {
+	   
+            bat 'docker_backend_testing.py'
+            }
+        }
+        stage('turn off docker') { 
+            steps {
+	   
+            bat 'docker-compose down' 
+            }
+        }          
+        stage('run backend server') {
+            steps {
+
+              bat 'start /min python rest_app.py'
+             }
+         }
+        options {
+              buildDiscarder(logRotator(numToKeepStr: '5', artifactNumToKeepStr: '20'))
+            }
+        }	
+     }
+   }         
+ }   

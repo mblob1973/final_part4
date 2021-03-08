@@ -1,0 +1,115 @@
+pipeline {
+    agent any 
+      stages {
+        stage('checkout') { 
+            steps {
+	git 'https://github.com/mblob1973/final_part4' 
+            }
+        }
+        stage('run app') { 
+            steps {
+	 
+	bat 'python rest_app.py'
+                    
+            }
+        }
+        stage('backend test') { 
+            steps {
+                  
+	bat 'python backend_testing.py' 
+                                  
+            }
+        }
+        stage('clear') { 
+            steps {
+	   
+	bat 'python clean_environemnt.py'  
+                     
+            }
+        }
+
+           environment {
+           registry = "mblob1973/final_part4" 
+           registryCredential = 'docker-hub' 
+           dockerImage = project
+          }
+           stage('build and push image') {
+              steps {
+                   script {
+
+                          dockerImage = project ":${BUILD_NUMBER}" 
+                           docker.withRegistry('', registryCredential) {
+                           dockerImage.push() 
+                         }
+                     }
+                }
+            }
+        
+        stage('make env file') { 
+            steps {
+
+                     bat "echo IMAGE_TAG=${BUILD_NUMBER} > .env"
+                  post {
+                  always {
+
+                          bat "docker rmi $registry:${BUILD_NUMBER}"
+            }
+        }
+        stage('run compose') { 
+            steps {
+	   
+            bat 'docker-compose up -d'
+                     
+            }
+        }
+        stage('testing backend docker') { 
+            steps {
+	   
+            bat 'docker_backend_testing.py'
+            }
+        }
+        stage('docker-compse turn off') { 
+            steps {
+	   
+            bat 'docker-compose down' 
+            }
+        } 
+        stage('helm update and install chart') { 
+            steps {
+	
+            bat 'helm repo update'
+            bat 'helm install moti mblob1973/helm_test -set image.version=mblob1973/final_part4":${BUILD_NUMBER}"
+            }
+        } 
+        stage('get url from cluster') { 
+            steps {
+	   
+            bat 'minikube service project –url > k8s_url.txt' 
+            }
+        }
+        stage('turn off docker') { 
+            steps {
+	   
+            bat 'K8S_backed_testing.py' 
+            }
+        }
+        stage('clean helm environment') { 
+            steps {
+	   
+            bat 'helm delete moti' 
+            }
+        }                   
+        stage('run backend server') {
+            steps {
+
+              bat 'start /min python rest_app.py'
+             }
+         }
+        options {
+              buildDiscarder(logRotator(numToKeepStr: '5', artifactNumToKeepStr: '20'))
+              properties([pipelineTriggers([pollSCM('*/60 * * * *')])])
+            }
+        }	
+     }
+   }         
+}
